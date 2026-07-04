@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.graph import get_graph
 from app.models.database import get_db, init_db
@@ -14,6 +16,8 @@ from app.models.schemas import ResearchRequest, SessionRecord
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -31,8 +35,16 @@ app = FastAPI(
 )
 
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 def _initial_state(query: str) -> dict:
     return {"session_id": str(uuid.uuid4()), "query": query, "logs": []}
+
+
+@app.get("/", include_in_schema=False)
+async def ui() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

@@ -6,7 +6,10 @@ providers is an env var change, not a code change.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import time
+from contextlib import asynccontextmanager
 from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -17,10 +20,41 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class _RateLimiter:
+    """Serializes every outbound LLM call, process-wide, with a minimum gap between them.
+
+    A concurrency semaphore (see app/agents/extractor.py) only bounds how many
+    calls are *initiated* at once - it doesn't stop them from overlapping in
+    flight, and a low-tier key can 429 on overlapping requests even when their
+    start times are spaced out. Holding the lock for the whole call (not just
+    the pre-call sleep) guarantees true one-at-a-time execution: no two
+    requests are ever in flight together, and the gap is measured from when
+    one call *finishes* to when the next one starts.
+    """
+
+    def __init__(self, min_interval: float) -> None:
+        self._min_interval = min_interval
+        self._lock = asyncio.Lock()
+        self._last_call_end = 0.0
+
+    @asynccontextmanager
+    async def throttle(self):
+        async with self._lock:
+            elapsed = time.monotonic() - self._last_call_end
+            remaining = self._min_interval - elapsed
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            try:
+                yield
+            finally:
+                self._last_call_end = time.monotonic()
+
+
 class LLMClient:
     def __init__(self) -> None:
         settings = get_settings()
         self.provider = settings.llm_provider.lower()
+        self._rate_limiter = _RateLimiter(settings.llm_min_interval_seconds)
 
         if self.provider == "anthropic":
             from anthropic import AsyncAnthropic
@@ -40,30 +74,33 @@ class LLMClient:
         else:
             raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider}")
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=2, max=20))
     async def complete(self, system: str, user: str, max_tokens: int = 2000) -> str:
         """Return raw text completion."""
-        if self.provider == "anthropic":
-            resp = await self._client.messages.create(
-                model=self._model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
-            return resp.content[0].text
-        if self.provider == "mistral":
-            resp = await self._client.chat.complete_async(
+        # The lock is held for the whole call (see _RateLimiter), including on
+        # retries, so no two LLM calls are ever in flight at the same time.
+        async with self._rate_limiter.throttle():
+            if self.provider == "anthropic":
+                resp = await self._client.messages.create(
+                    model=self._model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=[{"role": "user", "content": user}],
+                )
+                return resp.content[0].text
+            if self.provider == "mistral":
+                resp = await self._client.chat.complete_async(
+                    model=self._model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                )
+                return resp.choices[0].message.content or ""
+            resp = await self._client.chat.completions.create(
                 model=self._model,
                 max_tokens=max_tokens,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             )
             return resp.choices[0].message.content or ""
-        resp = await self._client.chat.completions.create(
-            model=self._model,
-            max_tokens=max_tokens,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        )
-        return resp.choices[0].message.content or ""
 
     async def complete_json(self, system: str, user: str, max_tokens: int = 2000) -> dict[str, Any]:
         """Return a completion parsed as JSON. Instructs the model explicitly and repairs on failure."""

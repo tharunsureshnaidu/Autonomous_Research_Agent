@@ -1,8 +1,10 @@
 """Extraction Agent: turns raw scraped/snippet text into structured findings.
 
-Runs one LLM extraction call per raw result, bounded by a semaphore so a
-large fan-in doesn't blow through rate limits, and skips results with no
-usable text instead of wasting a call on them.
+Runs one LLM extraction call per raw result, bounded by a semaphore so a large
+fan-in doesn't queue unbounded work in memory, and skips results with no usable
+text instead of wasting a call on them. Actual request pacing (respecting the
+LLM provider's rate limit) happens in app/tools/llm_client.py's shared
+rate limiter, not here - this semaphore is just backpressure.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_CONCURRENCY = 3  # conservative default - free-tier LLM keys (e.g. Mistral) rate-limit hard above this
+_CONCURRENCY = 5
 _MIN_CONTENT_CHARS = 40
 
 _SYSTEM = """You are the Extraction Agent of an autonomous research system.

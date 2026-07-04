@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-5"
     mistral_api_key: str = ""
     mistral_model: str = "mistral-large-latest"
+    # Minimum seconds between successive LLM calls, process-wide. Free/trial-tier
+    # keys often cap requests per second quite low - raise/lower to match your key.
+    llm_min_interval_seconds: float = 1.0
 
     # Search
     tavily_api_key: str = ""

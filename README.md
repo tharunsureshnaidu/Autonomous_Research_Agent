@@ -8,20 +8,19 @@ topic-to-source mappings and zero canned responses.
 
 ## Project Overview
 
-Every stage is a single-responsibility agent, orchestrated as a [LangGraph](https://langchain-ai.github.io/langgraph/)
-state graph. The LLM does the actual reasoning at every decision point in the
-pipeline — what to search for, which sources to use, what each source's content
-means, how relevant/credible/fresh/complete each finding is, and how to
-synthesize what was found into a report. Nothing about "AI queries go to arXiv"
-or "finance queries go to SEC" is coded anywhere — the Planner and Source
-Selector agents infer that from the query itself, choosing from a fixed set of
-*search tool types* (Tavily, DuckDuckGo web, DuckDuckGo news, Wikipedia, arXiv).
-There is no hardcoded credibility domain list either — the Relevance Scorer asks
-the LLM to judge source credibility from its own knowledge of the web, the same
-way a human researcher would. The only non-LLM logic in the pipeline is
-mechanical bookkeeping that doesn't involve interpreting content: exact-URL
-dedup, near-duplicate text merging (string similarity), JSON parsing/repair,
-and file I/O — none of it decides what the research finds or concludes.
+Each stage — planning, source selection, searching, extracting, scoring, and
+writing the report — is its own agent, wired together as a
+[LangGraph](https://langchain-ai.github.io/langgraph/) state graph. The LLM does
+the real reasoning at every step: what to search for, which sources fit the
+query, and how relevant/credible/fresh each finding is. Nothing is hardcoded —
+no fixed topic→source table, no credibility allowlist, no canned report
+template. The only non-LLM code is mechanical bookkeeping (URL dedup, JSON
+parsing, file I/O) that never touches what the research actually finds or
+concludes.
+
+A small web UI (`app/static/`, served at `/`) lets you run a query, watch the
+agent reason live, and read the finished report — plain HTML/CSS/JS, no
+framework, no build step.
 
 ## Architecture Diagram
 
@@ -129,6 +128,7 @@ Then edit `.env` and set at least one LLM provider key.
 | `ANTHROPIC_MODEL` | Anthropic model id | `claude-sonnet-4-5` |
 | `MISTRAL_API_KEY` | Mistral API key (if `LLM_PROVIDER=mistral`) | — |
 | `MISTRAL_MODEL` | Mistral model id | `mistral-large-latest` |
+| `LLM_MIN_INTERVAL_SECONDS` | Minimum gap between LLM calls, enforced process-wide | `1.0` |
 | `TAVILY_API_KEY` | Optional; enables the high-quality `tavily` source | — |
 | `MAX_SEARCH_RESULTS_PER_SOURCE` | Results fetched per search task | `5` |
 | `MAX_PAGES_TO_SCRAPE` | Reserved cap on full-page scrapes | `8` |
@@ -147,12 +147,16 @@ branches on `LLM_PROVIDER` and instantiates the matching official SDK
 `complete()`/`complete_json()` interface regardless of provider.
 
 > **Note on rate limits**: free/trial-tier LLM keys (Mistral's included) often
-> cap requests per second quite low. The Extraction Agent's default
-> concurrency (`_CONCURRENCY = 3` in `app/agents/extractor.py`) is tuned to be
-> gentle on that tier; raise it if your key has more headroom. Every LLM-calling
-> agent past the initial planning step (extractor, relevance scorer,
-> summarizer) degrades to a heuristic/mechanical fallback instead of crashing
-> the run if its call fails after retries — you'll see it noted in the report
+> cap requests per second quite low. A shared rate limiter in
+> `app/tools/llm_client.py` enforces a minimum gap (`LLM_MIN_INTERVAL_SECONDS`)
+> between *every* outbound LLM call, process-wide — this is what actually
+> prevents 429 storms, not the extractor's concurrency setting (which only
+> bounds how much work is queued at once, not how fast it's sent). If you still
+> see repeated "429 Rate limit exceeded" in the logs, raise this value; lower it
+> if your key has more headroom. Every LLM-calling agent past the initial
+> planning step (extractor, relevance scorer, summarizer) degrades to a
+> heuristic/mechanical fallback instead of crashing the run if its call fails
+> after retries — you'll see it noted in the report
 > and in the `reasoning_log`.
 
 ## Running the Application
@@ -162,6 +166,12 @@ uvicorn app.main:app --reload
 ```
 
 The API is served at `http://127.0.0.1:8000`; interactive docs at `/docs`.
+
+A minimal web UI is served at `http://127.0.0.1:8000/` (plain HTML/CSS/JS, no
+build step, no framework — `app/static/`). Type a query, watch the agent's
+reasoning stream in live as a terminal-style trace, then read the finished
+report and download it as Markdown or PDF. Past sessions are listed below and
+clickable to reload without re-running the pipeline.
 
 ## API Endpoints
 
@@ -309,7 +319,6 @@ Autonomous_Research_Agent/
 
 - Swap the difflib-based session similarity search for real embeddings (FAISS/Chroma) once history grows large.
 - Add authenticated multi-user sessions (currently a single shared SQLite store).
-- Add a lightweight web UI for streaming the reasoning log live.
 - Add more source tools behind the same `SourceType` enum (e.g. SEC EDGAR, GitHub, Yahoo Finance) — the planner/selector need no changes to start using them.
 - Persist and replay the full `ResearchState` per session (currently only the final report + summary are stored) for deeper audit/debugging.
 

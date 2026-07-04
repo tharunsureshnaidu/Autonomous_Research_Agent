@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Research Agent</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="shell-bar">
+    <div class="wordmark"><span class="wordmark-glyph">&#9642;</span> RESEARCH AGENT</div>
+  </header>
+
+  <main>
+    <section class="command-zone">
+      <form id="query-form" autocomplete="off">
+        <span class="prompt-glyph" aria-hidden="true">&rsaquo;</span>
+        <input
+          id="query-input"
+          type="text"
+          name="query"
+          placeholder="what do you want to research?"
+          minlength="3"
+          required
+        />
+        <button type="submit" id="run-btn">Run</button>
+      </form>
+      <p id="status-line" class="status-line" aria-live="polite"></p>
+    </section>
+
+    <section id="trace-section" class="trace-section is-hidden">
+      <div class="trace-header">
+        <span>reasoning trace</span>
+        <button id="trace-toggle" class="ghost-btn small" type="button">collapse</button>
+      </div>
+      <pre id="trace-log" class="trace-log" aria-live="polite"></pre>
+    </section>
+
+    <section id="report-section" class="report-section is-hidden">
+      <article id="report-card" class="paper-card"></article>
+      <div class="report-actions">
+        <a id="download-md" class="stamp-btn" href="#" download>Download&nbsp;Markdown</a>
+        <a id="download-pdf" class="stamp-btn" href="#" download>Download&nbsp;PDF</a>
+      </div>
+    </section>
+
+    <section id="history-section" class="history-section is-hidden">
+      <h2 class="section-label">recent research</h2>
+      <div id="history-list" class="history-grid"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

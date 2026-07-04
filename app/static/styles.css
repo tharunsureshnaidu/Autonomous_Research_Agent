@@ -1,0 +1,412 @@
+/*
+  Design idea: the app shell reads like a machine terminal (dark, monospace,
+  amber telemetry) because that's literally what's happening while the agent
+  works - it's reasoning out loud. The finished report "prints" onto a warm
+  paper card in a serif face, because a report is meant to be read, not
+  computed. The shell never lightens and the paper never darkens - that
+  contrast is the point, not a light/dark mode switch.
+*/
+
+:root {
+  --ink: #0f1420;
+  --ink-raised: #171d2b;
+  --ink-line: rgba(240, 168, 96, 0.16);
+  --ink-text: #e8e6df;
+  --ink-muted: #8890a0;
+  --amber: #f0a860;
+  --amber-dim: #b97f47;
+  --paper: #fbf8f1;
+  --paper-ink: #22201b;
+  --paper-muted: #6b6558;
+  --paper-line: #e4ddc9;
+
+  --mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--ink-text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+/* ---------- shell bar ---------- */
+
+.shell-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.75rem;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.wordmark {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-text);
+}
+
+.wordmark-glyph {
+  color: var(--amber);
+}
+
+.ghost-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--ink-line);
+  color: var(--ink-muted);
+  padding: 0.45rem 0.9rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ghost-btn:hover {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+}
+
+.ghost-btn.small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.65rem;
+}
+
+/* ---------- layout ---------- */
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 5rem;
+}
+
+/* ---------- command zone ---------- */
+
+.command-zone {
+  margin-bottom: 2.25rem;
+}
+
+#query-form {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-line);
+  border-radius: 6px;
+  padding: 0.5rem 0.5rem 0.5rem 1.1rem;
+}
+
+#query-form:focus-within {
+  border-color: var(--amber-dim);
+}
+
+.prompt-glyph {
+  font-family: var(--mono);
+  color: var(--amber);
+  font-size: 1.1rem;
+}
+
+#query-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink-text);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  padding: 0.6rem 0;
+}
+
+#query-input::placeholder {
+  color: var(--ink-muted);
+}
+
+#run-btn {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--amber);
+  color: #1a1204;
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+#run-btn:hover {
+  background: #f5b878;
+}
+
+#run-btn:active {
+  transform: scale(0.97);
+}
+
+#run-btn:disabled {
+  background: var(--ink-line);
+  color: var(--ink-muted);
+  cursor: progress;
+}
+
+.status-line {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  margin: 0.6rem 0.2rem 0;
+  min-height: 1em;
+}
+
+.status-line.is-error {
+  color: #e07a5f;
+}
+
+/* ---------- reasoning trace (terminal) ---------- */
+
+.trace-section {
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-line);
+  border-radius: 6px;
+  margin-bottom: 2.25rem;
+  overflow: hidden;
+}
+
+.trace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.trace-log {
+  margin: 0;
+  padding: 0.9rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--amber);
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.trace-section.is-collapsed .trace-log {
+  display: none;
+}
+
+.trace-log .trace-line {
+  display: block;
+  opacity: 0;
+  animation: trace-in 0.25s ease forwards;
+}
+
+.trace-log .trace-line .trace-node {
+  color: var(--ink-muted);
+}
+
+.trace-cursor::after {
+  content: "\2588";
+  color: var(--amber);
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes trace-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ---------- report (paper) ---------- */
+
+.report-section {
+  margin-bottom: 3rem;
+  animation: print-in 0.4s ease;
+}
+
+@keyframes print-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.paper-card {
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: 4px;
+  padding: 2.75rem 2.5rem;
+  font-family: var(--serif);
+  line-height: 1.6;
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+}
+
+.paper-card h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.4rem;
+  border-bottom: 2px solid var(--paper-ink);
+  padding-bottom: 0.6rem;
+}
+
+.paper-card .paper-meta {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  color: var(--paper-muted);
+  margin-bottom: 1.6rem;
+}
+
+.paper-card h2 {
+  font-size: 1.15rem;
+  color: var(--amber-dim);
+  margin: 1.8rem 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.paper-card p {
+  margin: 0 0 0.9rem;
+}
+
+.paper-card ul {
+  margin: 0 0 0.9rem;
+  padding-left: 1.3rem;
+}
+
+.paper-card li {
+  margin-bottom: 0.4rem;
+}
+
+.paper-card a {
+  color: var(--amber-dim);
+  word-break: break-all;
+}
+
+.report-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+}
+
+.stamp-btn {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid var(--amber-dim);
+  border-radius: 3px;
+  padding: 0.5rem 0.9rem;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.stamp-btn:hover {
+  background: var(--amber);
+  color: #1a1204;
+}
+
+/* ---------- history ---------- */
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0 0 1rem;
+  font-weight: 400;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.history-card {
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-line);
+  border-radius: 5px;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink-text);
+  font-family: var(--sans);
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.history-card:hover {
+  border-color: var(--amber-dim);
+  transform: translateY(-1px);
+}
+
+.history-card .history-query {
+  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.history-card .history-meta {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--ink-muted);
+}
+
+/* ---------- utility ---------- */
+
+.is-hidden {
+  display: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-log .trace-line,
+  .report-section,
+  .history-card {
+    animation: none !important;
+    transition: none !important;
+  }
+  .trace-cursor::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  main {
+    padding: 2rem 1rem 3rem;
+  }
+  .paper-card {
+    padding: 1.75rem 1.4rem;
+  }
+  #query-form {
+    flex-wrap: wrap;
+  }
+  #run-btn {
+    width: 100%;
+  }
+}
